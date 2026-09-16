@@ -1,0 +1,10 @@
+# MicMatch - dipendenze SOLO per lo sviluppo (test).
+# Non vanno installate in python-runtime/ (il runtime autonomo spedito con
+# l'app): pytest non serve a chi usa l'app, solo a chi ci lavora sul codice.
+#
+# Uso:
+#   python/venv/bin/pip install -r python/requirements-dev.txt
+#   python/venv/bin/pytest python/tests/
+
+-r requirements.txt
+pytest>=7.4.0

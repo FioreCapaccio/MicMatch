@@ -17,3 +17,7 @@ python-runtime/
 
 # Editor
 .vscode/
+
+# Test
+python/.pytest_cache/
+python/tests/__pycache__/
