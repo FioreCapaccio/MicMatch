@@ -1,0 +1,54 @@
+{
+  "name": "micmatch",
+  "version": "0.1.0",
+  "description": "MicMatch - Adatta il timbro di registrazioni fatte con microfoni diversi a una traccia di riferimento",
+  "main": "main.js",
+  "author": "ADR Studio",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "setup:python": "node scripts/setup-python-runtime.js",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.adrstudio.micmatch",
+    "productName": "MicMatch",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "python",
+        "to": "python",
+        "filter": ["**/*", "!venv", "!venv/**/*", "!__pycache__", "!__pycache__/**/*"]
+      },
+      {
+        "from": "python-runtime",
+        "to": "python-runtime"
+      }
+    ],
+    "asar": true,
+    "icon": "build/icon.png",
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
+      ]
+    },
+    "win": {
+      "target": ["nsis"]
+    }
+  }
+}

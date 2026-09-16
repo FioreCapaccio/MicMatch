@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; script-src 'self'; media-src file: data:;" />
+  <title>MicMatch</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-text">
+      <h1>MicMatch</h1>
+      <p class="subtitle">Adatta il timbro di registrazioni fatte con microfoni diversi a una traccia di riferimento</p>
+    </div>
+    <button id="btnQuit" class="btn btn-secondary btn-quit" title="Chiudi MicMatch">Esci</button>
+  </header>
+
+  <main class="layout">
+    <section class="panel dropzone" id="referencePanel">
+      <h2>1. Riferimento</h2>
+      <p class="hint">Il "suono" a cui vogliamo che le altre tracce assomiglino: una traccia audio registrata, oppure la risposta in frequenza tipica di un modello di microfono.</p>
+
+      <div class="mode-toggle" id="referenceModeToggle">
+        <button type="button" class="mode-btn active" data-mode="track">Traccia audio</button>
+        <button type="button" class="mode-btn" data-mode="mic_profile">Microfono di riferimento</button>
+      </div>
+
+      <div id="referenceTrackMode">
+        <button id="btnSelectReference" class="btn btn-primary">Seleziona file di riferimento…</button>
+        <div id="referenceInfo" class="file-info empty">Nessun file selezionato</div>
+        <audio id="referenceAudio" controls class="hidden"></audio>
+      </div>
+
+      <div id="referenceMicMode" class="hidden">
+        <label for="micProfileSelect" class="hint" style="margin-bottom:6px;">Modello microfono</label>
+        <select id="micProfileSelect"></select>
+        <div id="micProfileNote" class="file-info"></div>
+      </div>
+
+      <canvas id="referenceSpectrum" class="spectrum-canvas" width="480" height="140"></canvas>
+    </section>
+
+    <section class="panel dropzone" id="targetsPanel">
+      <h2>2. Tracce da adattare</h2>
+      <p class="hint">I file registrati con microfoni/ambienti diversi da correggere. Trascina qui uno o più file oppure scegli dal disco.</p>
+      <button id="btnAddTargets" class="btn btn-primary">Aggiungi file…</button>
+      <ul id="targetList" class="file-list"></ul>
+    </section>
+
+    <section class="panel" id="settingsPanel">
+      <h2>3. Impostazioni</h2>
+      <div class="knob-row">
+        <div id="knobMaxBoost"></div>
+        <div id="knobMaxCut"></div>
+        <div id="knobBlend"></div>
+        <div id="knobCeiling"></div>
+        <div id="knobRumble"></div>
+        <div id="knobDeess"></div>
+        <div id="knobDereverb"></div>
+      </div>
+      <p class="hint">Trascina un knob verso l'alto/basso per regolarlo (Shift = regolazione fine), rotellina del mouse per piccoli step, doppio click per il valore di default.</p>
+
+      <div class="setting-row">
+        <div class="loudness-quality-row">
+          <div>
+            <label>Target di loudness</label>
+            <div class="knob-row">
+              <div id="selectorLoudness"></div>
+            </div>
+          </div>
+          <div class="quality-selects">
+            <div class="quality-select-item">
+              <label for="numBands" title="Risoluzione EQ (bande di frequenza)">Risoluzione EQ</label>
+              <select id="numBands" title="Risoluzione EQ (bande di frequenza)">
+                <option value="15" title="Bassa (15 bande) — correzione più morbida">15 bande</option>
+                <option value="31" selected title="Media (31 bande, 1/3 di ottava) — consigliata">31 bande</option>
+                <option value="63" title="Alta (63 bande) — correzione più chirurgica">63 bande</option>
+              </select>
+            </div>
+            <div class="quality-select-item">
+              <label for="firTaps" title="Qualità filtro">Qualità filtro</label>
+              <select id="firTaps" title="Qualità filtro">
+                <option value="1023" title="Veloce (meno precisa sulle basse frequenze)">Veloce</option>
+                <option value="2047" selected title="Bilanciata — consigliata">Bilanciata</option>
+                <option value="4095" title="Alta precisione (più lenta)">Precisa</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <p class="hint">Loudness: click singolo o trascinamento = scorre gli standard, rotellina del mouse = avanti/indietro, doppio click = torna a "Traccia di riferimento" (non disponibile in modalità "Microfono di riferimento").</p>
+      </div>
+
+      <div class="setting-row">
+        <label>Cartella di destinazione</label>
+        <div class="output-dir-row">
+          <button id="btnSelectOutput" class="btn btn-secondary">Scegli cartella…</button>
+          <span id="outputDirLabel" class="output-dir-label">(sottocartella "matched" accanto ai file originali)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="processPanel">
+      <button id="btnProcess" class="btn btn-accent" disabled>Elabora</button>
+      <div id="progressWrap" class="progress-wrap hidden">
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <div id="progressLabel" class="progress-label"></div>
+      </div>
+      <div id="errorBox" class="error-box hidden"></div>
+    </section>
+
+    <section class="panel" id="resultsPanel">
+      <h2>Risultati</h2>
+      <div id="resultsList" class="results-list"></div>
+    </section>
+  </main>
+
+  <script src="knob.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

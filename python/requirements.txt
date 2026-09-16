@@ -1,0 +1,11 @@
+# MicMatch - Dipendenze Python per il motore DSP (python/mic_match.py)
+
+numpy>=1.24.0
+scipy>=1.11.0
+soundfile>=0.12.0
+pyloudnorm>=0.1.1
+
+# Riduzione riverbero (WPE - Weighted Prediction Error), usata da deess()/
+# dereverb() in mic_match.py. Puro numpy/scipy sotto il cofano (niente
+# torch/modelli da scaricare) - vedi mic_match.py per i limiti noti in mono.
+nara_wpe>=0.0.10

@@ -1,0 +1,19 @@
+# Node / Electron
+node_modules/
+dist/
+
+# Python
+python/venv/
+python/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Runtime Python autonomo scaricato da scripts/setup-python-runtime.js
+# (centinaia di MB, va rigenerato su ogni macchina, non committato)
+python-runtime/
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
