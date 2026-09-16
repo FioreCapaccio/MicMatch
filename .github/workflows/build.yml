@@ -43,6 +43,12 @@ jobs:
 
       - name: Costruisce il runtime Python autonomo
         run: npm run setup:python
+        env:
+          # Autenticato: senza, le richieste all'API di GitHub condividono il
+          # rate limit di 60/ora delle runner condivise e vanno in 403
+          # (osservato: il job macOS falliva qui). Il token e' fornito
+          # automaticamente da Actions, nessun secret da configurare.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compila il pacchetto
         run: npm run ${{ matrix.build_script }}

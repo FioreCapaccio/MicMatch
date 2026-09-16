@@ -76,12 +76,25 @@ function assetName() {
   return `cpython-${PBS_VERSION}+${PBS_TAG}-${triple}-install_only.tar.gz`;
 }
 
+// L'API di GitHub limita le richieste non autenticate a 60/ora per IP: sulle
+// runner condivise di GitHub Actions si esaurisce facilmente (HTTP 403,
+// osservato durante lo sviluppo). Se GITHUB_TOKEN/GH_TOKEN e' impostato (in
+// Actions lo e' sempre, via secrets.GITHUB_TOKEN nel workflow) lo mandiamo
+// come Authorization - solo verso api.github.com, mai verso l'host di
+// download dell'asset (S3/objects.githubusercontent.com dopo il redirect).
+function authHeaders(url) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (!token) return {};
+  const host = new URL(url).hostname;
+  return host === 'api.github.com' ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function httpsGet(url, redirectsLeft = 10) {
   return new Promise((resolve, reject) => {
     if (redirectsLeft < 0) return reject(new Error('troppi redirect'));
     const req = https.get(
       url,
-      { headers: { 'User-Agent': 'micmatch-setup', Accept: '*/*' } },
+      { headers: { 'User-Agent': 'micmatch-setup', Accept: '*/*', ...authHeaders(url) } },
       (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
