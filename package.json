@@ -19,6 +19,7 @@
   "build": {
     "appId": "com.adrstudio.micmatch",
     "productName": "MicMatch",
+    "publish": null,
     "directories": {
       "output": "dist"
     },
