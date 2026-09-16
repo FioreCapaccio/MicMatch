@@ -166,7 +166,44 @@ const FACTORY_PRESETS = {
   },
 };
 
+// Preset "ambientali": a differenza dei preset sopra, QUESTI cambiano anche
+// il riferimento (passano in modalita' "profilo microfono" su una delle
+// curve "ambient" di MIC_PROFILES in mic_match.py) - una simulazione di
+// posizionamento/ambientazione e' per definizione un bersaglio di EQ
+// diverso, non una regolazione dell'intensita' di matching verso quello che
+// c'e' gia'. Per questo hanno un apply dedicato (applyAmbientPreset) che
+// avvisa esplicitamente che il riferimento cambia. Restano EQ pura: nessun
+// riverbero sintetico, vedi i "note" dei profili "ambient_*" e i Limiti
+// noti nel README.
+const AMBIENT_PRESETS = {
+  "Ambiente — Presenza ravvicinata": {
+    title: "Simula una voce molto vicina al microfono (prossimità + presenza), via EQ stilizzata verso il profilo 'Presenza ravvicinata'.",
+    micProfile: "ambient_close",
+    knobs: { maxBoost: 6, maxCut: 4, blend: 100, ceiling: -1.0, rumble: 0, deess: 10, dereverb: 0 },
+    loudnessTarget: "none",
+    numBands: "31",
+    firTaps: "2047",
+  },
+  "Ambiente — Voce a distanza": {
+    title: "Simula una voce a diversi metri dal microfono (perdita di acuti e presenza), via EQ stilizzata verso il profilo 'Voce a distanza'.",
+    micProfile: "ambient_distance",
+    knobs: { maxBoost: 2, maxCut: 20, blend: 100, ceiling: -1.0, rumble: 40, deess: 0, dereverb: 0 },
+    loudnessTarget: "none",
+    numBands: "31",
+    firTaps: "2047",
+  },
+  "Ambiente — Voce all'aperto": {
+    title: "Simula un'ambientazione esterna (meno corpo medio-basso da riflessioni, acuti più ariosi), via EQ stilizzata verso il profilo 'Voce all'aperto'.",
+    micProfile: "ambient_outdoor",
+    knobs: { maxBoost: 4, maxCut: 6, blend: 100, ceiling: -1.0, rumble: 60, deess: 0, dereverb: 0 },
+    loudnessTarget: "none",
+    numBands: "31",
+    firTaps: "2047",
+  },
+};
+
 const FACTORY_PREFIX = "factory::";
+const AMBIENT_PREFIX = "ambient::";
 const USER_PREFIX = "user::";
 
 // ---------------------------------------------------------------------------
@@ -303,9 +340,21 @@ async function initMicProfiles() {
   try {
     const { profiles } = await window.micMatchAPI.listMicProfiles();
     state.micProfiles = profiles;
-    els.micProfileSelect.innerHTML = profiles
-      .map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
-      .join("");
+
+    els.micProfileSelect.innerHTML = "";
+    const micGroup = document.createElement("optgroup");
+    micGroup.label = "Modelli di microfono";
+    const ambientGroup = document.createElement("optgroup");
+    ambientGroup.label = "Ambientazioni (EQ stilizzata)";
+    profiles.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      (p.category === "ambient" ? ambientGroup : micGroup).appendChild(opt);
+    });
+    if (micGroup.children.length) els.micProfileSelect.appendChild(micGroup);
+    if (ambientGroup.children.length) els.micProfileSelect.appendChild(ambientGroup);
+
     if (profiles.length > 0) {
       state.micProfile = profiles[0].id;
       els.micProfileNote.textContent = profiles[0].note || "";
@@ -716,6 +765,18 @@ function renderPresetSelect(selectValue) {
   });
   els.presetSelect.appendChild(factoryGroup);
 
+  const ambientNames = Object.keys(AMBIENT_PRESETS);
+  const ambientGroup = document.createElement("optgroup");
+  ambientGroup.label = "Preset ambientali (EQ stilizzata, cambia il riferimento)";
+  ambientNames.forEach((n) => {
+    const opt = document.createElement("option");
+    opt.value = AMBIENT_PREFIX + n;
+    opt.textContent = n;
+    opt.title = AMBIENT_PRESETS[n].title || "";
+    ambientGroup.appendChild(opt);
+  });
+  els.presetSelect.appendChild(ambientGroup);
+
   if (userNames.length > 0) {
     const userGroup = document.createElement("optgroup");
     userGroup.label = "I tuoi preset";
@@ -735,8 +796,9 @@ function renderPresetSelect(selectValue) {
 function updatePresetButtonsState() {
   const value = els.presetSelect.value;
   els.btnLoadPreset.disabled = !value;
-  // I preset di fabbrica non si possono eliminare.
-  els.btnDeletePreset.disabled = !value || value.startsWith(FACTORY_PREFIX);
+  // I preset di fabbrica e ambientali non si possono eliminare.
+  els.btnDeletePreset.disabled =
+    !value || value.startsWith(FACTORY_PREFIX) || value.startsWith(AMBIENT_PREFIX);
 }
 
 // message: testo di stato. onUndo (opzionale): se presente, aggiunge un link
@@ -833,6 +895,25 @@ function applySettingsOnly(snap) {
   scheduleSaveSession();
 }
 
+// Applica un preset "ambientale": a differenza di applySettingsOnly, QUESTO
+// cambia anche il riferimento (passa in modalita' "profilo microfono" sulla
+// curva ambient indicata dal preset) - vedi il commento su AMBIENT_PRESETS
+// piu' sopra sul perche' non puo' essere "settings-only".
+function applyAmbientPreset(snap) {
+  if (!snap || !snap.micProfile) return;
+  if (!state.micProfiles.some((p) => p.id === snap.micProfile)) {
+    showPresetStatus(`Profilo ambientale "${snap.micProfile}" non disponibile.`);
+    return;
+  }
+  state.micProfile = snap.micProfile;
+  els.micProfileSelect.value = snap.micProfile;
+  const profile = state.micProfiles.find((p) => p.id === snap.micProfile);
+  els.micProfileNote.textContent = profile ? profile.note || "" : "";
+  setReferenceMode("mic_profile"); // carica anche lo spettro del profilo
+
+  applySettingsOnly(snap);
+}
+
 els.btnSavePreset.addEventListener("click", () => {
   const name = els.presetNameInput.value.trim();
   if (!name) {
@@ -840,7 +921,7 @@ els.btnSavePreset.addEventListener("click", () => {
     els.presetNameInput.focus();
     return;
   }
-  if (FACTORY_PRESETS[name]) {
+  if (FACTORY_PRESETS[name] || AMBIENT_PRESETS[name]) {
     showPresetStatus(`"${name}" è un nome riservato ai preset di fabbrica: scegline un altro.`);
     return;
   }
@@ -870,6 +951,15 @@ els.btnLoadPreset.addEventListener("click", () => {
     return;
   }
 
+  if (value.startsWith(AMBIENT_PREFIX)) {
+    const name = value.slice(AMBIENT_PREFIX.length);
+    const preset = AMBIENT_PRESETS[name];
+    if (!preset) return;
+    applyAmbientPreset(preset);
+    showPresetStatus(`Preset ambientale "${name}" applicato: riferimento passato al profilo EQ simulato.`);
+    return;
+  }
+
   const name = value.slice(USER_PREFIX.length);
   const presets = getPresets();
   if (!presets[name]) return;
@@ -879,7 +969,8 @@ els.btnLoadPreset.addEventListener("click", () => {
 
 els.btnDeletePreset.addEventListener("click", () => {
   const value = els.presetSelect.value;
-  if (!value || value.startsWith(FACTORY_PREFIX)) return; // rete di sicurezza, il bottone e' gia' disabilitato
+  // rete di sicurezza, il bottone e' gia' disabilitato per questi due casi
+  if (!value || value.startsWith(FACTORY_PREFIX) || value.startsWith(AMBIENT_PREFIX)) return;
   const name = value.slice(USER_PREFIX.length);
   const presets = getPresets();
   const removed = presets[name];

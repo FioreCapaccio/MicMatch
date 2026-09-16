@@ -18,11 +18,11 @@
   <main class="layout">
     <section class="panel dropzone" id="referencePanel">
       <h2>1. Riferimento</h2>
-      <p class="hint">Il "suono" a cui vogliamo che le altre tracce assomiglino: una traccia audio registrata, oppure la risposta in frequenza tipica di un modello di microfono.</p>
+      <p class="hint">Il "suono" a cui vogliamo che le altre tracce assomiglino: una traccia audio registrata, oppure la risposta in frequenza tipica di un modello di microfono (o un'ambientazione simulata: vicina, distante, esterna).</p>
 
       <div class="mode-toggle" id="referenceModeToggle">
         <button type="button" class="mode-btn active" data-mode="track">Traccia audio</button>
-        <button type="button" class="mode-btn" data-mode="mic_profile">Microfono di riferimento</button>
+        <button type="button" class="mode-btn" data-mode="mic_profile">Microfono / ambientazione</button>
       </div>
 
       <div id="referenceTrackMode">
@@ -32,7 +32,7 @@
       </div>
 
       <div id="referenceMicMode" class="hidden">
-        <label for="micProfileSelect" class="hint" style="margin-bottom:6px;">Modello microfono</label>
+        <label for="micProfileSelect" class="hint" style="margin-bottom:6px;">Modello microfono / ambientazione</label>
         <select id="micProfileSelect"></select>
         <div id="micProfileNote" class="file-info"></div>
       </div>

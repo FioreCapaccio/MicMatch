@@ -249,11 +249,25 @@ def band_spectrum(mono: np.ndarray, sr: int, num_bands: int) -> Tuple[np.ndarray
 # logaritmica di frequenza sulla stessa griglia di bande usata per lo
 # spettro delle tracce vere, cosi' il resto della pipeline (build_gain_curve,
 # plotting) non deve distinguere le due modalita'.
-
+#
+# "category": "mic" (modello di microfono reale) oppure "ambient" (curva di
+# posizionamento/ambientazione, vedi sotto) - serve solo al renderer per
+# raggruppare il selettore, la pipeline di matching li tratta allo stesso
+# modo (sono comunque solo un bersaglio di EQ).
+#
+# I profili "ambient" NON simulano un ambiente vero: sono un'equalizzazione
+# stilizzata che approssima il bilanciamento tonale tipico di una posizione
+# (vicina/lontana/esterna), costruita a orecchio dalla prassi comune di
+# sound design per dialoghi. Non aggiungono riverbero, prime riflessioni o
+# ritardo (l'app non ha un motore di riverbero sintetico) - solo l'effetto
+# di prossimità/distanza sono affrontabili con la sola EQ. Vanno quindi
+# intesi come un punto di partenza stilistico, non come una simulazione
+# fisica dell'ambiente.
 MIC_PROFILES: Dict[str, Dict[str, Any]] = {
     "u87": {
         "name": "Neumann U87 (cardioide) — approssimato",
         "note": "Curva timbrica indicativa, non una misurazione di laboratorio.",
+        "category": "mic",
         "breakpoints": [
             (20, -8.0), (40, -4.0), (80, -0.5), (150, 0.0), (1000, 0.0),
             (3000, 0.3), (5000, 1.2), (7000, 2.3), (9000, 3.0), (11000, 2.2),
@@ -263,6 +277,7 @@ MIC_PROFILES: Dict[str, Dict[str, Any]] = {
     "aston_spirit": {
         "name": "Aston Spirit (cardioide) — approssimato",
         "note": "Curva timbrica indicativa (condensatore, bassi estesi, presenza morbida), non una misurazione di laboratorio.",
+        "category": "mic",
         "breakpoints": [
             (20, -6.0), (30, -3.0), (60, -0.5), (150, 0.0), (1000, 0.0),
             (3000, 0.2), (5000, 1.0), (8000, 2.0), (11000, 2.2), (14000, 1.0),
@@ -275,10 +290,54 @@ MIC_PROFILES: Dict[str, Dict[str, Any]] = {
             "Curva timbrica indicativa con gli switch interni (bass roll-off, presence boost) "
             "in posizione flat; non una misurazione di laboratorio."
         ),
+        "category": "mic",
         "breakpoints": [
             (20, -10.0), (50, -1.0), (100, 0.0), (300, 0.0), (1000, 0.0),
             (2000, 0.2), (4000, 0.5), (6000, 0.3), (8000, -0.5), (10000, -2.0),
             (13000, -4.0), (16000, -7.0), (20000, -12.0),
+        ],
+    },
+    "ambient_close": {
+        "name": "Presenza ravvicinata (simulata)",
+        "note": (
+            "EQ stilizzata: enfasi dell'effetto di prossimità (bassi ~150Hz) e della "
+            "presenza (2-5kHz) tipica di una voce molto vicina al microfono. Solo EQ, "
+            "nessun riverbero sintetico."
+        ),
+        "category": "ambient",
+        "breakpoints": [
+            (20, -3.0), (60, 0.0), (100, 3.0), (150, 5.0), (250, 3.0),
+            (400, 0.5), (800, 0.0), (2000, 1.5), (3000, 3.0), (5000, 2.0),
+            (8000, 1.0), (12000, 0.0), (16000, -1.0), (20000, -2.0),
+        ],
+    },
+    "ambient_distance": {
+        "name": "Voce a distanza (simulata)",
+        "note": (
+            "EQ stilizzata: perdita di acuti per assorbimento dell'aria e calo della "
+            "presenza tipici di una voce a diversi metri dal microfono. Solo EQ, "
+            "nessun riverbero/prime riflessioni sintetiche (per quello serve un "
+            "motore di riverbero convoluzionale, che l'app non ha)."
+        ),
+        "category": "ambient",
+        "breakpoints": [
+            (20, -6.0), (60, -4.0), (100, -2.0), (200, 0.0), (400, 0.0),
+            (800, -1.0), (1500, -2.5), (3000, -4.5), (5000, -7.5),
+            (8000, -11.0), (12000, -15.0), (16000, -18.0), (20000, -20.0),
+        ],
+    },
+    "ambient_outdoor": {
+        "name": "Voce all'aperto (simulata)",
+        "note": (
+            "EQ stilizzata: riduzione del corpo/rimbombo medio-basso che normalmente "
+            "viene dalle riflessioni di una stanza (assenti all'aperto), con acuti "
+            "leggermente più ariosi. Solo EQ, non un'assenza reale di riverbero."
+        ),
+        "category": "ambient",
+        "breakpoints": [
+            (20, -3.0), (60, -2.0), (100, -1.0), (200, -2.0), (300, -3.0),
+            (500, -1.5), (800, 0.0), (1500, 0.0), (3000, 1.0), (5000, 1.5),
+            (8000, 2.0), (12000, 1.0), (16000, 0.0), (20000, -1.0),
         ],
     },
 }
@@ -610,7 +669,7 @@ def action_analyze(payload: Dict[str, Any]) -> Dict[str, Any]:
 def action_list_mic_profiles(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "profiles": [
-            {"id": pid, "name": p["name"], "note": p.get("note", "")}
+            {"id": pid, "name": p["name"], "note": p.get("note", ""), "category": p.get("category", "mic")}
             for pid, p in MIC_PROFILES.items()
         ]
     }

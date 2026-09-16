@@ -125,6 +125,22 @@ rotellina per piccoli step, doppio click per il valore di default.
   - *Dialoghi — Consegna Netflix/OTT*: -27 LUFS dialogue-gated, -2dBTP.
   - *Dialoghi — Consegna Broadcast EU*: EBU R128, -23 LUFS, -1dBTP.
   - *Dialoghi — Consegna Broadcast US*: ATSC A/85, -24 LUFS, -2dBTP.
+- **Preset ambientali** (`AMBIENT_PRESETS` in renderer.js): 3 simulazioni di
+  posizionamento/ambientazione, via EQ stilizzata verso una delle curve
+  `ambient_*` di `MIC_PROFILES` in mic_match.py. A differenza dei preset di
+  fabbrica sopra, QUESTI cambiano il riferimento (passano in modalità
+  "profilo microfono / ambientazione"): caricarne uno sostituisce
+  qualunque traccia di riferimento o profilo microfono già selezionato.
+  Sono pura EQ — l'app non ha un motore di riverbero sintetico, quindi non
+  aggiungono prime riflessioni, ritardo o coda di riverbero, solo il
+  bilanciamento tonale tipico della posizione. Non eliminabili, non
+  sovrascrivibili da un preset utente con lo stesso nome.
+  - *Ambiente — Presenza ravvicinata*: enfasi dell'effetto di prossimità
+    (bassi ~150Hz) e della presenza (2-5kHz).
+  - *Ambiente — Voce a distanza*: perdita di acuti (assorbimento dell'aria)
+    e calo di presenza.
+  - *Ambiente — Voce all'aperto*: meno corpo medio-basso da riflessioni
+    (assenti all'aperto), acuti leggermente più ariosi.
 - **Preset utente**: salvabili/richiamabili con un nome, da localStorage (non
   file su disco). Cattura l'intera sessione: riferimento, target, tutti i
   knob, target di loudness, cartella di output.
@@ -150,6 +166,11 @@ un'altra installazione.
 - **I profili microfono sono approssimati**: curve indicative costruite a
   mano dalle caratteristiche generali note di ogni modello, non misurazioni
   di laboratorio né riproduzioni dei grafici dei produttori.
+- **Le ambientazioni sono EQ, non spazializzazione**: i profili/preset
+  `ambient_*` (vicino/distante/esterno) sono un'equalizzazione stilizzata,
+  non una simulazione fisica — nessun riverbero sintetico, prime
+  riflessioni o delay, perché l'app non ha un motore di riverbero
+  convoluzionale.
 
 ## Struttura del codice Python (`python/mic_match.py`)
 
