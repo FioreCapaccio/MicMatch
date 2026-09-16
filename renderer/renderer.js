@@ -108,6 +108,68 @@ const loudnessSelector = new MicMatchSelector(document.getElementById("selectorL
 });
 
 // ---------------------------------------------------------------------------
+// Preset di fabbrica: punti di partenza per dialoghi da film, basati su
+// prassi consolidate di ADR e mastering per la consegna broadcast/streaming
+// (non "impostazioni magiche" - sono pensati per essere il punto di
+// partenza, poi regolabili). Contengono SOLO knob/loudness/qualita' - non
+// toccano riferimento, target o cartella di output (a differenza di un
+// preset utente, che e' uno snapshot completo della sessione): l'idea e'
+// "applica questa ricetta timbrica a quello su cui sto gia' lavorando",
+// non "ricrea tutta la sessione".
+//
+// Motivazioni sintetiche (vedi anche i "title" delle singole option in UI):
+// - ADR: correzione contenuta (tagliare e' piu' trasparente/sicuro che
+//   alzare), intensita' all'80% per restare naturali, HPF 80Hz (ripulisce
+//   rimbombi/urti senza toccare il fondamentale vocale, anche maschile
+//   grave), de-esser leggero (le cabine ADR spesso hanno piu' sibilanza
+//   della presa diretta sul set), loudness verso IL RIFERIMENTO (la firma
+//   dell'ADR e' proprio matchare quella specifica presa, non uno standard
+//   astratto), qualita' filtro massima (render offline finale).
+// - Consegna: intensita' piu' bassa (60%, una passata di mastering non deve
+//   ricolorare il timbro), target di loudness e ceiling dai rispettivi
+//   standard di consegna broadcast/streaming.
+const FACTORY_PRESETS = {
+  "ADR — Match produzione (delicato)": {
+    title: "Per l'inserimento ADR: correzione EQ contenuta e trasparente verso la presa di riferimento, HPF 80Hz, de-esser leggero, loudness verso il riferimento (non uno standard fisso).",
+    knobs: { maxBoost: 4, maxCut: 8, blend: 80, ceiling: -1.0, rumble: 80, deess: 20, dereverb: 0 },
+    loudnessTarget: "reference",
+    numBands: "31",
+    firTaps: "4095",
+  },
+  "ADR — Match produzione + camera viva": {
+    title: "Come 'ADR — Match produzione' ma con una riduzione leggera del riverbero, per una presa ADR registrata in una cabina non perfettamente trattata (effetto modesto in mono, vedi limiti noti in README).",
+    knobs: { maxBoost: 4, maxCut: 8, blend: 80, ceiling: -1.0, rumble: 80, deess: 20, dereverb: 25 },
+    loudnessTarget: "reference",
+    numBands: "31",
+    firTaps: "4095",
+  },
+  "Dialoghi — Consegna Netflix/OTT (-27 LUFS)": {
+    title: "Passata di mastering leggera per la consegna streaming: loudness -27 LUFS dialogue-gated, true peak -2dBTP (spec di consegna Netflix).",
+    knobs: { maxBoost: 3, maxCut: 6, blend: 60, ceiling: -2.0, rumble: 60, deess: 15, dereverb: 0 },
+    loudnessTarget: -27,
+    numBands: "31",
+    firTaps: "2047",
+  },
+  "Dialoghi — Consegna Broadcast EU (EBU R128, -23 LUFS)": {
+    title: "Loudness -23 LUFS, true peak -1dBTP (EBU R128, standard broadcast europeo).",
+    knobs: { maxBoost: 3, maxCut: 6, blend: 60, ceiling: -1.0, rumble: 60, deess: 15, dereverb: 0 },
+    loudnessTarget: -23,
+    numBands: "31",
+    firTaps: "2047",
+  },
+  "Dialoghi — Consegna Broadcast US (ATSC A/85, -24 LUFS)": {
+    title: "Loudness -24 LUFS, true peak -2dBTP (prassi comune ATSC A/85 / CALM Act).",
+    knobs: { maxBoost: 3, maxCut: 6, blend: 60, ceiling: -2.0, rumble: 60, deess: 15, dereverb: 0 },
+    loudnessTarget: -24,
+    numBands: "31",
+    firTaps: "2047",
+  },
+};
+
+const FACTORY_PREFIX = "factory::";
+const USER_PREFIX = "user::";
+
+// ---------------------------------------------------------------------------
 // Plotting: spettro su asse X logaritmico (20Hz - 20kHz)
 // ---------------------------------------------------------------------------
 
@@ -626,9 +688,12 @@ function savePresets(presets) {
   }
 }
 
-function renderPresetSelect(selectName) {
-  const presets = getPresets();
-  const names = Object.keys(presets).sort((a, b) => a.localeCompare(b, "it"));
+// selectValue: valore GIA' con prefisso (es. "user::Podcast") da
+// riselezionare dopo il rebuild, se presente.
+function renderPresetSelect(selectValue) {
+  const userPresets = getPresets();
+  const userNames = Object.keys(userPresets).sort((a, b) => a.localeCompare(b, "it"));
+  const factoryNames = Object.keys(FACTORY_PRESETS); // ordine curato, non alfabetico
 
   // Costruito via DOM (non innerHTML con stringhe interpolate): un nome di
   // preset con una virgoletta dentro romperebbe l'attributo value con la
@@ -639,21 +704,39 @@ function renderPresetSelect(selectName) {
   emptyOpt.value = "";
   emptyOpt.textContent = "— nessun preset —";
   els.presetSelect.appendChild(emptyOpt);
-  names.forEach((n) => {
-    const opt = document.createElement("option");
-    opt.value = n;
-    opt.textContent = n;
-    els.presetSelect.appendChild(opt);
-  });
 
-  if (selectName && names.includes(selectName)) els.presetSelect.value = selectName;
+  const factoryGroup = document.createElement("optgroup");
+  factoryGroup.label = "Preset di fabbrica (dialoghi da film)";
+  factoryNames.forEach((n) => {
+    const opt = document.createElement("option");
+    opt.value = FACTORY_PREFIX + n;
+    opt.textContent = n;
+    opt.title = FACTORY_PRESETS[n].title || "";
+    factoryGroup.appendChild(opt);
+  });
+  els.presetSelect.appendChild(factoryGroup);
+
+  if (userNames.length > 0) {
+    const userGroup = document.createElement("optgroup");
+    userGroup.label = "I tuoi preset";
+    userNames.forEach((n) => {
+      const opt = document.createElement("option");
+      opt.value = USER_PREFIX + n;
+      opt.textContent = n;
+      userGroup.appendChild(opt);
+    });
+    els.presetSelect.appendChild(userGroup);
+  }
+
+  if (selectValue) els.presetSelect.value = selectValue;
   updatePresetButtonsState();
 }
 
 function updatePresetButtonsState() {
-  const hasSelection = !!els.presetSelect.value;
-  els.btnLoadPreset.disabled = !hasSelection;
-  els.btnDeletePreset.disabled = !hasSelection;
+  const value = els.presetSelect.value;
+  els.btnLoadPreset.disabled = !value;
+  // I preset di fabbrica non si possono eliminare.
+  els.btnDeletePreset.disabled = !value || value.startsWith(FACTORY_PREFIX);
 }
 
 // message: testo di stato. onUndo (opzionale): se presente, aggiunge un link
@@ -730,6 +813,26 @@ async function applySnapshot(snap) {
   updateProcessButtonState();
 }
 
+// Versione "leggera" di applySnapshot per i preset di fabbrica: tocca solo
+// knob/loudness/qualita', lascia riferimento/target/cartella di output
+// esattamente come sono. Un preset di fabbrica e' una "ricetta timbrica" da
+// applicare a quello su cui si sta gia' lavorando, non una sessione intera
+// da ricreare (quello lo fanno solo i preset salvati dall'utente).
+function applySettingsOnly(snap) {
+  if (!snap) return;
+  if (snap.knobs) {
+    for (const key of Object.keys(knobs)) {
+      if (typeof snap.knobs[key] === "number") knobs[key].setValue(snap.knobs[key], false);
+    }
+  }
+  if (snap.loudnessTarget !== undefined) {
+    loudnessSelector.setValueIfExists(snap.loudnessTarget, false);
+  }
+  if (snap.numBands) els.numBands.value = String(snap.numBands);
+  if (snap.firTaps) els.firTaps.value = String(snap.firTaps);
+  scheduleSaveSession();
+}
+
 els.btnSavePreset.addEventListener("click", () => {
   const name = els.presetNameInput.value.trim();
   if (!name) {
@@ -737,11 +840,15 @@ els.btnSavePreset.addEventListener("click", () => {
     els.presetNameInput.focus();
     return;
   }
+  if (FACTORY_PRESETS[name]) {
+    showPresetStatus(`"${name}" è un nome riservato ai preset di fabbrica: scegline un altro.`);
+    return;
+  }
   const presets = getPresets();
   const overwriting = Object.prototype.hasOwnProperty.call(presets, name);
   presets[name] = buildSnapshot();
   savePresets(presets);
-  renderPresetSelect(name);
+  renderPresetSelect(USER_PREFIX + name);
   els.presetNameInput.value = "";
   showPresetStatus(overwriting ? `Preset "${name}" sovrascritto.` : `Preset "${name}" salvato.`);
 });
@@ -751,8 +858,19 @@ els.presetNameInput.addEventListener("keydown", (e) => {
 });
 
 els.btnLoadPreset.addEventListener("click", () => {
-  const name = els.presetSelect.value;
-  if (!name) return;
+  const value = els.presetSelect.value;
+  if (!value) return;
+
+  if (value.startsWith(FACTORY_PREFIX)) {
+    const name = value.slice(FACTORY_PREFIX.length);
+    const preset = FACTORY_PRESETS[name];
+    if (!preset) return;
+    applySettingsOnly(preset);
+    showPresetStatus(`Preset di fabbrica "${name}" applicato (riferimento e tracce invariati).`);
+    return;
+  }
+
+  const name = value.slice(USER_PREFIX.length);
   const presets = getPresets();
   if (!presets[name]) return;
   applySnapshot(presets[name]);
@@ -760,8 +878,9 @@ els.btnLoadPreset.addEventListener("click", () => {
 });
 
 els.btnDeletePreset.addEventListener("click", () => {
-  const name = els.presetSelect.value;
-  if (!name) return;
+  const value = els.presetSelect.value;
+  if (!value || value.startsWith(FACTORY_PREFIX)) return; // rete di sicurezza, il bottone e' gia' disabilitato
+  const name = value.slice(USER_PREFIX.length);
   const presets = getPresets();
   const removed = presets[name];
   delete presets[name];
@@ -771,7 +890,7 @@ els.btnDeletePreset.addEventListener("click", () => {
     const current = getPresets();
     current[name] = removed;
     savePresets(current);
-    renderPresetSelect(name);
+    renderPresetSelect(USER_PREFIX + name);
     showPresetStatus(`Preset "${name}" ripristinato.`);
   });
 });

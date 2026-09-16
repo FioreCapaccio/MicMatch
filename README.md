@@ -112,9 +112,22 @@ rotellina per piccoli step, doppio click per il valore di default.
 
 ## Preset e sessione
 
-- **Preset**: salvabili/richiamabili con un nome, da localStorage (non file
-  su disco). Cattura riferimento, target, tutti i knob, target di loudness,
-  cartella di output.
+- **Preset di fabbrica** (`FACTORY_PRESETS` in renderer.js): 5 punti di
+  partenza per dialoghi da film, basati su prassi consolidate di ADR e
+  mastering per la consegna broadcast/streaming — non toccano riferimento/
+  target/cartella di output, solo la "ricetta" timbrica (knob, loudness,
+  qualità). Non eliminabili, non sovrascrivibili da un preset utente con lo
+  stesso nome.
+  - *ADR — Match produzione (delicato)*: correzione contenuta e trasparente
+    per l'inserimento ADR, loudness verso il riferimento.
+  - *ADR — Match produzione + camera viva*: come sopra, con una riduzione
+    leggera del riverbero per una cabina non perfettamente trattata.
+  - *Dialoghi — Consegna Netflix/OTT*: -27 LUFS dialogue-gated, -2dBTP.
+  - *Dialoghi — Consegna Broadcast EU*: EBU R128, -23 LUFS, -1dBTP.
+  - *Dialoghi — Consegna Broadcast US*: ATSC A/85, -24 LUFS, -2dBTP.
+- **Preset utente**: salvabili/richiamabili con un nome, da localStorage (non
+  file su disco). Cattura l'intera sessione: riferimento, target, tutti i
+  knob, target di loudness, cartella di output.
 - **Ultima sessione**: salvata automaticamente ad ogni modifica e
   ripristinata al prossimo avvio.
 
