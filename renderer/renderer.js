@@ -1,7 +1,7 @@
 // MicMatch - logica renderer (nessun accesso Node diretto: tutto passa da
-// window.micMatchAPI esposto dal preload via contextBridge).
-
-const AUDIO_EXTENSIONS = ["wav", "aiff", "aif", "flac", "mp3", "m4a", "caf"];
+// window.micMatchAPI esposto dal preload via contextBridge). Il filtro per
+// estensione audio vive in main.js (AUDIO_EXTENSIONS), condiviso tra i
+// dialog nativi e l'espansione delle cartelle trascinate.
 
 const state = {
   referenceMode: "track", // "track" | "mic_profile"
@@ -348,14 +348,11 @@ function renderTargetList() {
 // Drag & drop file
 // ---------------------------------------------------------------------------
 
-function isAudioFile(name) {
-  const ext = name.split(".").pop().toLowerCase();
-  return AUDIO_EXTENSIONS.includes(ext);
-}
-
-function pathsFromDropEvent(e) {
+// Percorsi grezzi trascinati, file E cartelle insieme: il filtro per
+// estensione e l'espansione ricorsiva delle cartelle avvengono lato main
+// (fs:expandPaths in main.js), il renderer non ha accesso a fs.
+function rawPathsFromDropEvent(e) {
   return Array.from(e.dataTransfer.files)
-    .filter((f) => isAudioFile(f.name))
     .map((f) => window.micMatchAPI.getPathForFile(f))
     .filter(Boolean);
 }
@@ -375,14 +372,22 @@ function setupDropzone(panelEl, onDropPaths) {
     }
   });
 
-  panelEl.addEventListener("drop", (e) => {
+  panelEl.addEventListener("drop", async (e) => {
     e.preventDefault();
     e.stopPropagation();
     panelEl.classList.remove("dragover");
-    const paths = pathsFromDropEvent(e);
+    const rawPaths = rawPathsFromDropEvent(e);
+    if (rawPaths.length === 0) return;
+
+    const { paths, truncated } = await window.micMatchAPI.expandDroppedPaths(rawPaths);
     if (paths.length === 0) {
-      showError("Il file trascinato non sembra un file audio supportato (wav, aiff, flac, mp3, m4a, caf).");
+      showError(
+        "Nel file o nella cartella trascinata non c'è nessun file audio supportato (wav, aiff, flac, mp3, m4a, caf)."
+      );
       return;
+    }
+    if (truncated) {
+      showError(`La cartella trascinata contiene troppi file: ne sono stati presi solo i primi ${paths.length}.`);
     }
     onDropPaths(paths);
   });

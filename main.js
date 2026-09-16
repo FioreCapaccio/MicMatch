@@ -267,6 +267,56 @@ ipcMain.handle("shell:reveal", (_event, filePath) => {
   shell.showItemInFolder(filePath);
 });
 
+// ---------------------------------------------------------------------------
+// Espansione ricorsiva di percorsi trascinati (drag & drop di cartelle
+// intere) - il renderer non ha accesso a fs (contextIsolation, niente
+// nodeIntegration), quindi la scansione della cartella deve passare da qui.
+// ---------------------------------------------------------------------------
+
+const MAX_EXPANDED_FILES = 2000; // rete di sicurezza contro un drop per sbaglio di un'intera home directory
+
+function expandPathRecursive(inputPath, collected, state) {
+  if (collected.length >= MAX_EXPANDED_FILES) {
+    state.truncated = true;
+    return;
+  }
+  let stat;
+  try {
+    stat = fs.statSync(inputPath);
+  } catch (_) {
+    return; // percorso non piu' valido (rimosso tra il drop e la lettura): ignorato in silenzio
+  }
+
+  if (stat.isDirectory()) {
+    let entries;
+    try {
+      entries = fs.readdirSync(inputPath, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue; // salta file/cartelle nascosti (.DS_Store, ecc.)
+      if (collected.length >= MAX_EXPANDED_FILES) {
+        state.truncated = true;
+        return;
+      }
+      expandPathRecursive(path.join(inputPath, entry.name), collected, state);
+    }
+  } else if (stat.isFile()) {
+    const ext = path.extname(inputPath).slice(1).toLowerCase();
+    if (AUDIO_EXTENSIONS.includes(ext)) collected.push(inputPath);
+  }
+}
+
+ipcMain.handle("fs:expandPaths", (_event, paths) => {
+  const collected = [];
+  const state = { truncated: false };
+  for (const p of paths) {
+    expandPathRecursive(p, collected, state);
+  }
+  return { paths: collected, truncated: state.truncated };
+});
+
 ipcMain.handle("app:quit", () => {
   app.quit();
 });

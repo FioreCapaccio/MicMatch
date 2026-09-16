@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld("micMatchAPI", {
   // (drag & drop) per motivi di sicurezza: va richiesto esplicitamente cosi'.
   getPathForFile: (file) => webUtils.getPathForFile(file),
 
+  // Espande cartelle trascinate nell'elenco (ricorsivo) dei file audio che
+  // contengono - il renderer non ha fs, la scansione vera avviene in main.js.
+  expandDroppedPaths: (paths) => ipcRenderer.invoke("fs:expandPaths", paths),
+
   analyze: (filePath) => ipcRenderer.invoke("mic-match:analyze", filePath),
   listMicProfiles: () => ipcRenderer.invoke("mic-match:listMicProfiles"),
   micProfileSpectrum: (profileId, numBands) =>
