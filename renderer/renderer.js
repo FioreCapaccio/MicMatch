@@ -35,6 +35,13 @@ const els = {
   btnSelectOutput: document.getElementById("btnSelectOutput"),
   outputDirLabel: document.getElementById("outputDirLabel"),
 
+  presetSelect: document.getElementById("presetSelect"),
+  presetNameInput: document.getElementById("presetNameInput"),
+  btnLoadPreset: document.getElementById("btnLoadPreset"),
+  btnSavePreset: document.getElementById("btnSavePreset"),
+  btnDeletePreset: document.getElementById("btnDeletePreset"),
+  presetStatus: document.getElementById("presetStatus"),
+
   btnProcess: document.getElementById("btnProcess"),
   progressWrap: document.getElementById("progressWrap"),
   progressFill: document.getElementById("progressFill"),
@@ -51,24 +58,31 @@ const els = {
 const knobs = {
   maxBoost: new MicMatchKnob(document.getElementById("knobMaxBoost"), {
     min: 0, max: 18, step: 0.5, value: 6, defaultValue: 6, unit: " dB", label: "Boost max/banda",
+    onChange: () => scheduleSaveSession(),
   }),
   maxCut: new MicMatchKnob(document.getElementById("knobMaxCut"), {
     min: 0, max: 24, step: 0.5, value: 12, defaultValue: 12, unit: " dB", label: "Taglio max/banda",
+    onChange: () => scheduleSaveSession(),
   }),
   blend: new MicMatchKnob(document.getElementById("knobBlend"), {
     min: 0, max: 100, step: 5, value: 100, defaultValue: 100, unit: "%", label: "Intensità matching",
+    onChange: () => scheduleSaveSession(),
   }),
   ceiling: new MicMatchKnob(document.getElementById("knobCeiling"), {
     min: -6, max: 0, step: 0.1, value: -0.3, defaultValue: -0.3, unit: " dBFS", label: "Soglia picchi",
+    onChange: () => scheduleSaveSession(),
   }),
   rumble: new MicMatchKnob(document.getElementById("knobRumble"), {
     min: 0, max: 200, step: 5, value: 0, defaultValue: 0, unit: " Hz", label: "Anti-rimbombo (HPF)",
+    onChange: () => scheduleSaveSession(),
   }),
   deess: new MicMatchKnob(document.getElementById("knobDeess"), {
     min: 0, max: 100, step: 5, value: 0, defaultValue: 0, unit: "%", label: "De-esser",
+    onChange: () => scheduleSaveSession(),
   }),
   dereverb: new MicMatchKnob(document.getElementById("knobDereverb"), {
     min: 0, max: 100, step: 5, value: 0, defaultValue: 0, unit: "%", label: "Riduzione riverbero",
+    onChange: () => scheduleSaveSession(),
   }),
 };
 
@@ -90,6 +104,7 @@ const loudnessSelector = new MicMatchSelector(document.getElementById("selectorL
   options: LOUDNESS_OPTIONS,
   defaultIndex: 0, // "reference"
   label: "",
+  onChange: () => scheduleSaveSession(),
 });
 
 // ---------------------------------------------------------------------------
@@ -190,8 +205,9 @@ async function loadReference(filePath) {
     plotCurves(els.referenceSpectrumCanvas, [
       { freqs: analysis.spectrum.freqs, db: analysis.spectrum.db, color: "#4fd1c5" },
     ]);
+    scheduleSaveSession();
   } catch (err) {
-    showError(`Errore analizzando il riferimento: ${err.message}`);
+    showError(`Errore analizzando il riferimento: ${err.message}`, err.details);
     els.referenceInfo.className = "file-info empty";
     els.referenceInfo.textContent = "Nessun file selezionato";
     els.referenceAudio.classList.add("hidden");
@@ -217,7 +233,7 @@ async function loadMicProfileSpectrum(profileId) {
     const { spectrum } = await window.micMatchAPI.micProfileSpectrum(profileId, 31);
     plotCurves(els.referenceSpectrumCanvas, [{ freqs: spectrum.freqs, db: spectrum.db, color: "#4fd1c5" }]);
   } catch (err) {
-    showError(`Errore caricando il profilo microfono: ${err.message}`);
+    showError(`Errore caricando il profilo microfono: ${err.message}`, err.details);
   }
 }
 
@@ -233,7 +249,7 @@ async function initMicProfiles() {
       els.micProfileNote.textContent = profiles[0].note || "";
     }
   } catch (err) {
-    showError(`Errore caricando i profili microfono: ${err.message}`);
+    showError(`Errore caricando i profili microfono: ${err.message}`, err.details);
   }
 }
 
@@ -243,6 +259,7 @@ els.micProfileSelect.addEventListener("change", () => {
   els.micProfileNote.textContent = profile ? profile.note || "" : "";
   if (state.referenceMode === "mic_profile") loadMicProfileSpectrum(state.micProfile);
   updateProcessButtonState();
+  scheduleSaveSession();
 });
 
 function setReferenceMode(mode) {
@@ -269,13 +286,21 @@ function setReferenceMode(mode) {
   }
 
   updateProcessButtonState();
+  scheduleSaveSession();
 }
 
 els.referenceModeToggle.querySelectorAll(".mode-btn").forEach((btn) => {
   btn.addEventListener("click", () => setReferenceMode(btn.dataset.mode));
 });
 
-initMicProfiles();
+renderPresetSelect();
+initMicProfiles().then(() => {
+  const last = loadLastSession();
+  if (last) {
+    applySnapshot(last);
+    showPresetStatus("Sessione precedente ripristinata.");
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Tracce target
@@ -287,6 +312,7 @@ function addTargetFiles(filePaths) {
   }
   renderTargetList();
   updateProcessButtonState();
+  scheduleSaveSession();
 }
 
 els.btnAddTargets.addEventListener("click", async () => {
@@ -310,6 +336,7 @@ function renderTargetList() {
       state.targetPaths = state.targetPaths.filter((p) => p !== filePath);
       renderTargetList();
       updateProcessButtonState();
+      scheduleSaveSession();
     });
     li.appendChild(nameSpan);
     li.appendChild(removeBtn);
@@ -376,7 +403,11 @@ els.btnSelectOutput.addEventListener("click", async () => {
   if (!dir) return;
   state.outputDir = dir;
   els.outputDirLabel.textContent = dir;
+  scheduleSaveSession();
 });
+
+els.numBands.addEventListener("change", () => scheduleSaveSession());
+els.firTaps.addEventListener("change", () => scheduleSaveSession());
 
 els.btnQuit.addEventListener("click", () => {
   window.micMatchAPI.quitApp();
@@ -391,13 +422,31 @@ function updateProcessButtonState() {
   els.btnProcess.disabled = !(hasReference && state.targetPaths.length > 0);
 }
 
-function showError(message) {
-  els.errorBox.textContent = message;
+// message: testo comprensibile (gia' pensato per l'utente da
+// friendly_error_message() lato Python, o scritto qui per errori lato UI).
+// details (opzionale): traceback/log tecnico, mostrato solo dietro un
+// "Dettagli tecnici" collassabile - non lo sbattiamo in faccia di default.
+function showError(message, details) {
+  els.errorBox.innerHTML = "";
+  const p = document.createElement("div");
+  p.textContent = message;
+  els.errorBox.appendChild(p);
+  if (details) {
+    const disclosure = document.createElement("details");
+    disclosure.className = "error-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "Dettagli tecnici";
+    disclosure.appendChild(summary);
+    const pre = document.createElement("pre");
+    pre.textContent = details;
+    disclosure.appendChild(pre);
+    els.errorBox.appendChild(disclosure);
+  }
   els.errorBox.classList.remove("hidden");
 }
 function clearError() {
   els.errorBox.classList.add("hidden");
-  els.errorBox.textContent = "";
+  els.errorBox.innerHTML = "";
 }
 
 function escapeHtml(str) {
@@ -444,7 +493,7 @@ els.btnProcess.addEventListener("click", async () => {
     renderResults(result);
     els.progressLabel.textContent = "Completato";
   } catch (err) {
-    showError(`Errore durante l'elaborazione: ${err.message}`);
+    showError(`Errore durante l'elaborazione: ${err.message}`, err.details);
   } finally {
     unsubscribe();
     els.btnProcess.disabled = false;
@@ -497,5 +546,231 @@ function renderResults(result) {
     els.resultsList.appendChild(card);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Persistenza: preset salvabili + ripristino automatico dell'ultima sessione
+// ---------------------------------------------------------------------------
+//
+// Tutto via localStorage del renderer: per uso locale non serve passare dal
+// processo main, e localStorage di Electron sopravvive ai riavvii dell'app
+// su questa stessa installazione (e' legato al profilo utente dell'app, non
+// alla sessione della finestra).
+
+const LAST_SESSION_KEY = "micmatch.lastSession";
+const PRESETS_KEY = "micmatch.presets";
+let saveSessionTimer = null;
+
+function buildSnapshot() {
+  return {
+    referenceMode: state.referenceMode,
+    referencePath: state.referencePath,
+    micProfile: state.micProfile,
+    targetPaths: state.targetPaths.slice(),
+    outputDir: state.outputDir,
+    knobs: {
+      maxBoost: knobs.maxBoost.value,
+      maxCut: knobs.maxCut.value,
+      blend: knobs.blend.value,
+      ceiling: knobs.ceiling.value,
+      rumble: knobs.rumble.value,
+      deess: knobs.deess.value,
+      dereverb: knobs.dereverb.value,
+    },
+    loudnessTarget: loudnessSelector.value,
+    numBands: els.numBands.value,
+    firTaps: els.firTaps.value,
+  };
+}
+
+function saveLastSession() {
+  try {
+    localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(buildSnapshot()));
+  } catch (_) {
+    /* storage pieno o non disponibile: non e' critico per l'uso dell'app */
+  }
+}
+
+function scheduleSaveSession() {
+  clearTimeout(saveSessionTimer);
+  saveSessionTimer = setTimeout(saveLastSession, 400);
+}
+
+function loadLastSession() {
+  try {
+    const raw = localStorage.getItem(LAST_SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getPresets() {
+  try {
+    const raw = localStorage.getItem(PRESETS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function savePresets(presets) {
+  try {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  } catch (_) {
+    showError("Impossibile salvare il preset (storage locale pieno o non disponibile).");
+  }
+}
+
+function renderPresetSelect(selectName) {
+  const presets = getPresets();
+  const names = Object.keys(presets).sort((a, b) => a.localeCompare(b, "it"));
+
+  // Costruito via DOM (non innerHTML con stringhe interpolate): un nome di
+  // preset con una virgoletta dentro romperebbe l'attributo value con la
+  // concatenazione di stringhe, anche passando da escapeHtml (che sfugge
+  // < > & ma non le virgolette, corrette solo dentro un attributo).
+  els.presetSelect.innerHTML = "";
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "— nessun preset —";
+  els.presetSelect.appendChild(emptyOpt);
+  names.forEach((n) => {
+    const opt = document.createElement("option");
+    opt.value = n;
+    opt.textContent = n;
+    els.presetSelect.appendChild(opt);
+  });
+
+  if (selectName && names.includes(selectName)) els.presetSelect.value = selectName;
+  updatePresetButtonsState();
+}
+
+function updatePresetButtonsState() {
+  const hasSelection = !!els.presetSelect.value;
+  els.btnLoadPreset.disabled = !hasSelection;
+  els.btnDeletePreset.disabled = !hasSelection;
+}
+
+// message: testo di stato. onUndo (opzionale): se presente, aggiunge un link
+// "Annulla" cliccabile accanto al messaggio. NIENT dialog nativi (alert/
+// confirm/prompt) qui: window.prompt() non e' implementato in Electron e
+// resta bloccato in attesa di una risposta che non arriva mai (verificato
+// durante lo sviluppo) - tutte le conferme passano da qui.
+function showPresetStatus(message, onUndo) {
+  els.presetStatus.innerHTML = "";
+  els.presetStatus.appendChild(document.createTextNode(message));
+  if (onUndo) {
+    const link = document.createElement("span");
+    link.className = "undo-link";
+    link.textContent = "Annulla";
+    link.addEventListener("click", () => {
+      clearTimeout(showPresetStatus._t);
+      els.presetStatus.textContent = "";
+      onUndo();
+    });
+    els.presetStatus.appendChild(link);
+  }
+  clearTimeout(showPresetStatus._t);
+  showPresetStatus._t = setTimeout(() => {
+    els.presetStatus.textContent = "";
+  }, 6000);
+}
+
+// Riapplica uno snapshot (preset o ultima sessione) allo stato dell'app.
+// Ordine importante: il profilo microfono va impostato PRIMA di
+// setReferenceMode (che, se la modalita' e' "mic_profile", carica subito lo
+// spettro del profilo corrente - deve gia' essere quello giusto). I knob e
+// il target di loudness vanno impostati DOPO, perche' setReferenceMode ha
+// una sua logica di sicurezza che puo' spostare il target di loudness su
+// "none": la vogliamo sovrascrivere con il valore vero salvato nello snapshot.
+async function applySnapshot(snap) {
+  if (!snap) return;
+
+  if (snap.micProfile && state.micProfiles.some((p) => p.id === snap.micProfile)) {
+    state.micProfile = snap.micProfile;
+    els.micProfileSelect.value = snap.micProfile;
+    const profile = state.micProfiles.find((p) => p.id === snap.micProfile);
+    els.micProfileNote.textContent = profile ? profile.note || "" : "";
+  }
+
+  setReferenceMode(snap.referenceMode || "track");
+
+  if ((snap.referenceMode || "track") === "track" && snap.referencePath) {
+    loadReference(snap.referencePath); // gestisce gia' da solo il caso file non piu' trovato
+  }
+
+  state.targetPaths = [];
+  if (Array.isArray(snap.targetPaths) && snap.targetPaths.length) {
+    addTargetFiles(snap.targetPaths);
+  } else {
+    renderTargetList();
+  }
+
+  if (snap.outputDir) {
+    state.outputDir = snap.outputDir;
+    els.outputDirLabel.textContent = snap.outputDir;
+  }
+
+  if (snap.knobs) {
+    for (const key of Object.keys(knobs)) {
+      if (typeof snap.knobs[key] === "number") knobs[key].setValue(snap.knobs[key], false);
+    }
+  }
+  if (snap.loudnessTarget !== undefined) {
+    loudnessSelector.setValueIfExists(snap.loudnessTarget, false);
+  }
+  if (snap.numBands) els.numBands.value = String(snap.numBands);
+  if (snap.firTaps) els.firTaps.value = String(snap.firTaps);
+
+  updateProcessButtonState();
+}
+
+els.btnSavePreset.addEventListener("click", () => {
+  const name = els.presetNameInput.value.trim();
+  if (!name) {
+    showPresetStatus("Inserisci un nome per il preset qui sopra.");
+    els.presetNameInput.focus();
+    return;
+  }
+  const presets = getPresets();
+  const overwriting = Object.prototype.hasOwnProperty.call(presets, name);
+  presets[name] = buildSnapshot();
+  savePresets(presets);
+  renderPresetSelect(name);
+  els.presetNameInput.value = "";
+  showPresetStatus(overwriting ? `Preset "${name}" sovrascritto.` : `Preset "${name}" salvato.`);
+});
+
+els.presetNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") els.btnSavePreset.click();
+});
+
+els.btnLoadPreset.addEventListener("click", () => {
+  const name = els.presetSelect.value;
+  if (!name) return;
+  const presets = getPresets();
+  if (!presets[name]) return;
+  applySnapshot(presets[name]);
+  showPresetStatus(`Preset "${name}" caricato.`);
+});
+
+els.btnDeletePreset.addEventListener("click", () => {
+  const name = els.presetSelect.value;
+  if (!name) return;
+  const presets = getPresets();
+  const removed = presets[name];
+  delete presets[name];
+  savePresets(presets);
+  renderPresetSelect();
+  showPresetStatus(`Preset "${name}" eliminato.`, () => {
+    const current = getPresets();
+    current[name] = removed;
+    savePresets(current);
+    renderPresetSelect(name);
+    showPresetStatus(`Preset "${name}" ripristinato.`);
+  });
+});
+
+els.presetSelect.addEventListener("change", updatePresetButtonsState);
 
 updateProcessButtonState();

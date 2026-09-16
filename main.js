@@ -180,11 +180,17 @@ function runPythonAction(action, payload, onProgress) {
     child.on("close", (code) => {
       if (settled) return;
       settled = true;
-      if (code !== 0) {
-        reject(new Error(stderrBuffer || `mic_match.py terminato con codice ${code}`));
-      } else {
-        reject(new Error("Nessun RESULT ricevuto dal processo Python"));
-      }
+      // Il processo e' morto prima di passare da emit_error() (es. errore di
+      // import a livello di modulo, prima che il nostro try/except in main()
+      // possa intervenire): niente messaggio amichevole gia' pronto, quindi
+      // ne mettiamo uno generico qui e teniamo lo stderr grezzo come dettaglio.
+      const error = new Error(
+        code !== 0
+          ? "Il motore di elaborazione si e' interrotto in modo imprevisto."
+          : "Il motore di elaborazione non ha restituito alcun risultato."
+      );
+      error.details = stderrBuffer || `mic_match.py terminato con codice ${code}`;
+      reject(error);
     });
 
     function handleLine(line) {
@@ -209,7 +215,9 @@ function runPythonAction(action, payload, onProgress) {
         try {
           const data = JSON.parse(line.slice("ERROR:".length));
           settled = true;
-          reject(new Error(data.message || "Errore sconosciuto nello script Python"));
+          const error = new Error(data.message || "Errore sconosciuto nello script Python");
+          error.details = data.details || "";
+          reject(error);
         } catch (err) {
           settled = true;
           reject(new Error(`ERROR JSON non valido: ${err.message}`));

@@ -18,7 +18,9 @@ Protocollo I/O (stesso pattern usato in ADR Studio Suite):
   stdin  <- singola riga JSON con l'azione richiesta
   stdout -> PROGRESS:<json>   { percent, stage, message }
   stdout -> RESULT:<json>     payload specifico per azione
-  stdout -> ERROR:<json>      { message }
+  stdout -> ERROR:<json>      { message, details }  # message: leggibile per
+                              # l'utente; details: traceback completo, solo
+                              # per debug (vedi friendly_error_message())
   exit 0 successo, 1 errore.
 
 Azioni:
@@ -124,9 +126,34 @@ def emit_result(data: Dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
-def emit_error(message: str) -> None:
-    sys.stdout.write("ERROR:" + json.dumps({"message": str(message)}, ensure_ascii=False) + "\n")
+def emit_error(message: str, details: str = "") -> None:
+    payload = {"message": str(message), "details": details}
+    sys.stdout.write("ERROR:" + json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
+
+
+def friendly_error_message(exc: BaseException) -> str:
+    """Traduce le eccezioni piu' comuni in un messaggio comprensibile per chi
+    usa l'app (non uno sviluppatore): prima si vedeva il traceback Python
+    grezzo nel riquadro d'errore dell'interfaccia. Il traceback completo
+    resta comunque disponibile a parte (vedi "details" in emit_error/
+    main()) per chi deve fare debug.
+    """
+    if isinstance(exc, ValueError):
+        # I ValueError sollevati da questo modulo (vedi _check_audio_usable,
+        # mic_profile_spectrum, ecc.) hanno gia' un messaggio in italiano
+        # pensato per essere letto cosi' com'e'.
+        return str(exc)
+    if isinstance(exc, FileNotFoundError):
+        return "File non trovato: potrebbe essere stato spostato, rinominato o eliminato dopo la selezione."
+    if isinstance(exc, PermissionError):
+        return "Permesso negato: verifica i permessi di lettura/scrittura del file o della cartella di destinazione."
+    if isinstance(exc, MemoryError):
+        return "Il file e' troppo grande per essere elaborato con la memoria disponibile su questo computer."
+    text = str(exc).lower()
+    if any(s in text for s in ("format not recognised", "unknown format", "error opening", "unsupported")):
+        return "Il file audio non e' leggibile: formato non supportato o file corrotto."
+    return "Si e' verificato un errore imprevisto durante l'elaborazione."
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +166,36 @@ MIN_FREQ_HZ = 20.0
 
 def load_audio(path: str) -> Tuple[np.ndarray, int]:
     """Ritorna (samples, sample_rate). samples ha shape (n,) mono o (n, ch)."""
+    # Controllo esplicito invece di lasciare fare a soundfile: per un file
+    # davvero mancante, libsndfile risponde con un generico "System error"
+    # che il pattern-matching di friendly_error_message() scambierebbe per
+    # un file corrotto - un FileNotFoundError vero da' un messaggio giusto.
+    if not Path(path).exists():
+        raise FileNotFoundError(path)
     data, sr = sf.read(path, always_2d=False, dtype="float32")
     return data, sr
+
+
+MIN_DURATION_SEC = 0.1
+SILENCE_PEAK_THRESHOLD = 1e-5
+
+
+def check_audio_usable(data: np.ndarray, sr: int, label: str) -> None:
+    """Controlla che il file sia abbastanza lungo e non silenzioso prima di
+    mandarlo nella pipeline DSP. Senza questo, un file troppo corto o vuoto
+    puo' far fallire STFT/WPE piu' a fondo nella pipeline con un errore
+    numpy/scipy poco chiaro (es. "cannot reshape array of size 0") invece di
+    un messaggio comprensibile subito all'inizio.
+    """
+    duration = (len(data) / sr) if sr else 0.0
+    if duration < MIN_DURATION_SEC:
+        raise ValueError(
+            f'"{label}" e\' troppo corto ({duration * 1000:.0f} ms): '
+            f"serve almeno {int(MIN_DURATION_SEC * 1000)} ms di audio per poter essere elaborato."
+        )
+    peak = float(np.max(np.abs(data))) if data.size else 0.0
+    if peak < SILENCE_PEAK_THRESHOLD:
+        raise ValueError(f'"{label}" sembra silenzioso: non c\'e\' segnale utile da analizzare.')
 
 
 def to_mono(data: np.ndarray) -> np.ndarray:
@@ -529,6 +584,7 @@ def action_analyze(payload: Dict[str, Any]) -> Dict[str, Any]:
     path = payload["path"]
     emit_progress(10, "load", f"Carico {Path(path).name}")
     data, sr = load_audio(path)
+    check_audio_usable(data, sr, Path(path).name)
     mono = to_mono(data)
 
     emit_progress(50, "spectrum", "Calcolo spettro")
@@ -611,6 +667,7 @@ def action_match(payload: Dict[str, Any]) -> Dict[str, Any]:
         reference_path = payload["reference_path"]
         emit_progress(0, "reference", f"Analizzo riferimento: {Path(reference_path).name}")
         ref_data, ref_sr = load_audio(reference_path)
+        check_audio_usable(ref_data, ref_sr, Path(reference_path).name)
         ref_mono = to_mono(ref_data)
         ref_centers, ref_db = band_spectrum(ref_mono, ref_sr, num_bands)
         ref_lufs = measure_lufs(ref_data, ref_sr)
@@ -622,6 +679,7 @@ def action_match(payload: Dict[str, Any]) -> Dict[str, Any]:
         name = Path(target_path).name
         emit_progress(100 * step / total_steps, "load", f"Carico {name}")
         src_data, src_sr = load_audio(target_path)
+        check_audio_usable(src_data, src_sr, name)
 
         if rumble_hz > 0:
             emit_progress(100 * step / total_steps, "rumble", f"Filtro anti-rimbombo: {name}")
@@ -721,7 +779,7 @@ def main() -> int:
         emit_result(result)
         return 0
     except Exception as exc:  # noqa: BLE001 - vogliamo sempre riportare l'errore al processo padre
-        emit_error(f"{exc}\n{traceback.format_exc()}")
+        emit_error(friendly_error_message(exc), details=traceback.format_exc())
         return 1
 
 

@@ -97,6 +97,22 @@
           <span id="outputDirLabel" class="output-dir-label">(sottocartella "matched" accanto ai file originali)</span>
         </div>
       </div>
+
+      <div class="setting-row">
+        <label for="presetSelect">Preset</label>
+        <div class="preset-row">
+          <select id="presetSelect">
+            <option value="">— nessun preset —</option>
+          </select>
+          <button id="btnLoadPreset" class="btn btn-secondary" disabled>Carica</button>
+          <button id="btnDeletePreset" class="btn btn-secondary" disabled title="Elimina il preset selezionato">🗑</button>
+        </div>
+        <div class="preset-row">
+          <input type="text" id="presetNameInput" placeholder="Nome nuovo preset…" maxlength="60" />
+          <button id="btnSavePreset" class="btn btn-secondary">Salva come nuovo</button>
+        </div>
+        <p id="presetStatus" class="hint preset-status"></p>
+      </div>
     </section>
 
     <section class="panel" id="processPanel">
