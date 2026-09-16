@@ -1,0 +1,55 @@
+name: Build
+
+# Compila i pacchetti macOS (arm64, come da package.json) e Windows (x64),
+# ognuno con il proprio python-runtime autonomo (vedi
+# scripts/setup-python-runtime.js e README.md, sezione "Perché un Python
+# autonomo"). Uso personale, non firmato/notarizzato: i pacchetti restano
+# come artifact del workflow, non c'è pubblicazione automatica di release.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            build_script: build:mac
+            artifact_name: micmatch-mac
+            dist_glob: |
+              dist/*.dmg
+              dist/*.zip
+          - os: windows-latest
+            build_script: build:win
+            artifact_name: micmatch-win
+            dist_glob: |
+              dist/*.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installa le dipendenze Node
+        run: npm ci
+
+      - name: Costruisce il runtime Python autonomo
+        run: npm run setup:python
+
+      - name: Compila il pacchetto
+        run: npm run ${{ matrix.build_script }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.dist_glob }}
+          if-no-files-found: error
+          retention-days: 14
